@@ -5,14 +5,32 @@
     <link rel="icon" type="image/x-icon" href="./favicon.png">
     <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-    <py-env>
-      - folium
-      - pandas
-    </py-env>
+    <link rel="stylesheet" href="./assets/css/examples.css" />
     </head>
     <body>
-      <div id="folium" style="width: 100%; height: 100%"></div>
-      <py-script output="folium">
+    <nav class="navbar" style="background-color: #000000;">
+      <div class="app-header">
+        <a href="/">
+          <img src="./logo.png" class="logo">
+        </a>
+        <a class="title" href="" style="color: #f0ab3c;">Folium</a>
+      </div>
+    </nav>
+    <section class="pyscript">
+      <div id="folium"></div>
+
+      <py-tutor>
+        <py-config>
+          packages = [
+            "folium",
+            "pandas"
+          ]
+          plugins = [
+            "../build/plugins/python/py_tutor.py"
+          ]
+        </py-config>
+
+        <py-script>
 import folium
 import json
 import pandas as pd
@@ -43,7 +61,10 @@ folium.Choropleth(
 
 folium.LayerControl().add_to(m)
 
-m
-      </py-script>
-    </body>
+display(m, target="folium")
+        </py-script>
+
+      </py-tutor>
+   </section>
+  </body>
 </html>

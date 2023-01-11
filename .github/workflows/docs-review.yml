@@ -57,14 +57,11 @@ jobs:
         -   name: Configure AWS credentials
             uses: aws-actions/configure-aws-credentials@v1.6.1
             with:
-                aws-region: ${{secrets.AWS_REGION}}
+                aws-region: ${{ secrets.AWS_REGION }}
                 role-to-assume: ${{ secrets.AWS_OIDC_RUNNER_ROLE }}
 
         -   name: Copy redirect file
             run: aws s3 cp --quiet ./docs/_build/html/_static/redirect.html s3://docs.pyscript.net/index.html
-
-        # -   name: Delete review directory
-        #     run: aws s3 rm --recursive s3://docs.pyscript.net/review/${{ github.event.number }}/
 
         -   name: Sync to S3
             run: aws s3 sync --quiet ./docs/_build/html/ s3://docs.pyscript.net/review/${{ github.event.number }}/

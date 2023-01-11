@@ -1,77 +1,263 @@
-import pytest
-
-from .support import PyScriptTest
+from .support import PyScriptTest, wait_for_render
 
 
 class TestPyRepl(PyScriptTest):
+    def _replace(self, py_repl, newcode):
+        """
+        Clear the editor and write new code in it.
+        WARNING: this assumes that the textbox has already the focus
+        """
+        # clear the editor, write new code
+        self.page.keyboard.press("Control+A")
+        self.page.keyboard.press("Backspace")
+        self.page.keyboard.type(newcode)
+
     def test_repl_loads(self):
         self.pyscript_run(
             """
-            <py-repl id="my-repl" auto-generate="true"> </py-repl>
+            <py-repl></py-repl>
             """
         )
-
         py_repl = self.page.query_selector("py-repl")
         assert py_repl
         assert "Python" in py_repl.inner_text()
 
-    @pytest.mark.xfail
-    def test_repl_runs_on_button_press(self):
+    def test_execute_preloaded_source(self):
         """
-        Current this test fails due to an exception when we iterate over
-        'importmaps'
+        Unfortunately it tests two things at once, but it's impossible to write a
+        smaller test. I think this is the most basic test that we can write.
 
-        [  2.28 JS exception   ] TypeError: importmaps is not iterable
-            at PyRepl._register_esm (http://127.0.0.1:8080/build/pyscript.js:227:37)
-            at PyRepl.evaluate (http://127.0.0.1:8080/build/pyscript.js:252:22)
-            at http://127.0.0.1:8080/build/pyscript.js:23678:21
-            at runFor (http://127.0.0.1:8080/build/pyscript.js:11780:25)
-            at runHandlers (http://127.0.0.1:8080/build/pyscript.js:11789:17)
-            at Object.keydown (http://127.0.0.1:8080/build/pyscript.js:11691:20)
-            at InputState.runCustomHandlers (http://127.0.0.1:8080/build/pyscript.js:8194:37)
-            at HTMLDivElement.<anonymous> (http://127.0.0.1:8080/build/pyscript.js:8156:30)
+        We test that:
+            1. the source code that we put in the tag is loaded inside the editor
+            2. clicking the button executes it
         """
         self.pyscript_run(
             """
-            <py-repl id="my-repl" auto-generate="true"> </py-repl>
+            <py-repl>
+                print('hello from py-repl')
+            </py-repl>
             """
         )
+        py_repl = self.page.locator("py-repl")
+        src = py_repl.inner_text()
+        assert "print('hello from py-repl')" in src
+        py_repl.locator("button").click()
+        assert self.console.log.lines[-1] == "hello from py-repl"
 
-        self.page.locator("py-repl").type("print(2+2)")
-
-        # We only have one button in the page
-        self.page.locator("button").click()
-
-        # The result gets the id of the repl + n
-        repl_result = self.page.locator("#my-repl-1")
-
-        assert repl_result.inner_text() == "4"
-
-    @pytest.mark.xfail
-    def test_repl_runs_with_shift_enter(self):
-        """
-        Current this test fails due to an exception when we iterate over
-        'importmaps'
-
-        [  2.28 JS exception   ] TypeError: importmaps is not iterable
-            at PyRepl._register_esm (http://127.0.0.1:8080/build/pyscript.js:227:37)
-            at PyRepl.evaluate (http://127.0.0.1:8080/build/pyscript.js:252:22)
-            at http://127.0.0.1:8080/build/pyscript.js:23678:21
-            at runFor (http://127.0.0.1:8080/build/pyscript.js:11780:25)
-            at runHandlers (http://127.0.0.1:8080/build/pyscript.js:11789:17)
-            at Object.keydown (http://127.0.0.1:8080/build/pyscript.js:11691:20)
-            at InputState.runCustomHandlers (http://127.0.0.1:8080/build/pyscript.js:8194:37)
-            at HTMLDivElement.<anonymous> (http://127.0.0.1:8080/build/pyscript.js:8156:30)
-        """
+    def test_execute_code_typed_by_the_user(self):
         self.pyscript_run(
             """
-            <py-repl id="my-repl" auto-generate="true"> </py-repl>
+            <py-repl></py-repl>
             """
         )
-        self.page.locator("py-repl").type("2+2")
+        py_repl = self.page.locator("py-repl")
+        py_repl.type('print("hello")')
+        py_repl.locator("button").click()
+        assert self.console.log.lines[-1] == "hello"
 
-        # Confirm that we get a result by using the keys shortcut
+    def test_execute_on_shift_enter(self):
+        self.pyscript_run(
+            """
+            <py-repl>
+                print("hello world")
+            </py-repl>
+            """
+        )
+        self.page.wait_for_selector("#runButton")
         self.page.keyboard.press("Shift+Enter")
-        repl_result = self.page.locator("#my-repl-1")
+        wait_for_render(self.page, "*", "hello world")
 
-        assert repl_result.text_content() == "4"
+        assert self.console.log.lines[0] == self.PY_COMPLETE
+        assert self.console.log.lines[-1] == "hello world"
+
+        # Shift-enter should not add a newline to the editor
+        assert self.page.locator(".cm-line").count() == 1
+
+    def test_display(self):
+        self.pyscript_run(
+            """
+            <py-repl>
+                display('hello world')
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        py_repl.locator("button").click()
+        out_div = py_repl.locator("div.py-repl-output")
+        assert out_div.all_inner_texts()[0] == "hello world"
+
+    def test_show_last_expression(self):
+        """
+        Test that we display() the value of the last expression, as you would
+        expect by a REPL
+        """
+        self.pyscript_run(
+            """
+            <py-repl>
+                42
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        py_repl.locator("button").click()
+        out_div = py_repl.locator("div.py-repl-output")
+        assert out_div.all_inner_texts()[0] == "42"
+
+    def test_run_clears_previous_output(self):
+        """
+        Check that we clear the previous output of the cell before executing it
+        again
+        """
+        self.pyscript_run(
+            """
+            <py-repl  auto-generate="true">
+                display('hello world')
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        out_div = py_repl.locator("div.py-repl-output")
+        self.page.keyboard.press("Shift+Enter")
+        assert out_div.all_inner_texts()[0] == "hello world"
+        #
+        # clear the editor, write new code, execute
+        self._replace(py_repl, "display('another output')")
+        self.page.keyboard.press("Shift+Enter")
+        assert out_div.all_inner_texts()[1] == "another output"
+
+    def test_python_exception(self):
+        """
+        See also test01_basic::test_python_exception, since it's very similar
+        """
+        self.pyscript_run(
+            """
+            <py-repl>
+                raise Exception('this is an error')
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        py_repl.locator("button").click()
+        #
+        # check that we sent the traceback to the console
+        tb_lines = self.console.error.lines[-1].splitlines()
+        assert tb_lines[0] == "[pyexec] Python exception:"
+        assert tb_lines[1] == "Traceback (most recent call last):"
+        assert tb_lines[-1] == "Exception: this is an error"
+        #
+        # check that we show the traceback in the page
+        err_pre = py_repl.locator("div.py-repl-output > pre.py-error")
+        tb_lines = err_pre.inner_text().splitlines()
+        assert tb_lines[0] == "Traceback (most recent call last):"
+        assert tb_lines[-1] == "Exception: this is an error"
+
+    def test_python_exception_after_previous_output(self):
+        self.pyscript_run(
+            """
+            <py-repl auto-generate="true">
+                display('hello world')
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        out_div = py_repl.locator("div.py-repl-output")
+        self.page.keyboard.press("Shift+Enter")
+        assert out_div.all_inner_texts()[0] == "hello world"
+        #
+        # clear the editor, write new code, execute
+        self._replace(py_repl, "0/0")
+        self.page.keyboard.press("Shift+Enter")
+        assert "hello world" not in out_div.all_inner_texts()[1]
+        assert "ZeroDivisionError" in out_div.all_inner_texts()[1]
+
+    def test_hide_previous_error_after_successful_run(self):
+        """
+        this tests the fact that a new error div should be created once there's an
+        error but also that it should disappear automatically once the error
+        is fixed
+        """
+        self.pyscript_run(
+            """
+            <py-repl  auto-generate="true">
+                raise Exception('this is an error')
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        out_div = py_repl.locator("div.py-repl-output")
+        self.page.keyboard.press("Shift+Enter")
+        assert "this is an error" in out_div.all_inner_texts()[0]
+        #
+        self._replace(py_repl, "display('hello')")
+        self.page.keyboard.press("Shift+Enter")
+        assert out_div.all_inner_texts()[1] == "hello"
+
+    def test_output_attribute(self):
+        self.pyscript_run(
+            """
+            <py-repl output="mydiv">
+                display('hello world')
+            </py-repl>
+            <hr>
+            <div id="mydiv"></div>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        py_repl.locator("button").click()
+        #
+        # check that we did NOT write to py-repl-output
+        out_div = py_repl.locator("div.py-repl-output")
+        assert out_div.inner_text() == ""
+        # check that we are using mydiv instead
+        mydiv = self.page.locator("#mydiv")
+        assert mydiv.all_inner_texts()[0] == "hello world"
+
+    def test_output_attribute_does_not_exist(self):
+        """
+        If we try to use an attribute which doesn't exist, we display an error
+        instead
+        """
+        self.pyscript_run(
+            """
+            <py-repl output="I-dont-exist">
+                print('I will not be executed')
+            </py-repl>
+            """
+        )
+        py_repl = self.page.locator("py-repl")
+        py_repl.locator("button").click()
+        #
+        out_div = py_repl.locator("div.py-repl-output")
+        msg = "py-repl ERROR: cannot find the output element #I-dont-exist in the DOM"
+        assert out_div.all_inner_texts()[0] == msg
+        assert "I will not be executed" not in self.console.log.text
+
+    def test_auto_generate(self):
+        self.pyscript_run(
+            """
+            <py-repl auto-generate="true">
+            </py-repl>
+            """
+        )
+        py_repls = self.page.locator("py-repl")
+        outputs = py_repls.locator("div.py-repl-output")
+        assert py_repls.count() == 1
+        assert outputs.count() == 1
+        #
+        # evaluate the py-repl, and wait for the newly generated one
+        self.page.keyboard.type("'hello'")
+        self.page.keyboard.press("Shift+Enter")
+        self.page.locator('py-repl[exec-id="2"]').wait_for()
+        assert py_repls.count() == 2
+        assert outputs.count() == 2
+        #
+        # now we type something else: the new py-repl should have the focus
+        self.page.keyboard.type("'world'")
+        self.page.keyboard.press("Shift+Enter")
+        self.page.locator('py-repl[exec-id="3"]').wait_for()
+        assert py_repls.count() == 3
+        assert outputs.count() == 3
+        #
+        # check that the code and the outputs are in order
+        out_texts = [el.inner_text() for el in self.iter_locator(outputs)]
+        assert out_texts == ["hello", "world", ""]

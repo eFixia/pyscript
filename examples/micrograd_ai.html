@@ -9,17 +9,20 @@
         <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
         <script defer src="https://pyscript.net/latest/pyscript.js"></script>
 
-        <py-env>
-            - micrograd
-            - numpy
-            - matplotlib
-        </py-env>
-
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     </head>
 
     <body style="padding-top: 20px; padding-right: 20px; padding-bottom: 20px; padding-left: 20px">
         <h1>Micrograd - A tiny Autograd engine (with a bite! :))</h1><br>
+
+        <py-config>
+            packages = [
+              "micrograd",
+              "numpy",
+              "matplotlib"
+            ]
+        </py-config>
+
         <div>
             <p>
                 <a href="https://github.com/karpathy/micrograd">Micrograd</a> is a tiny Autograd engine created
@@ -49,7 +52,7 @@
                 <div id="python-status">Python is currently starting.  Please wait...</div>
             </p>
             <p>
-                <button id="run-all-button" class="btn btn-primary" type="submit" py-onClick="run_all_micrograd_demo">Run All</button><br>
+                <button id="run-all-button" class="btn btn-primary" type="submit" py-onClick="run_all_micrograd_demo()">Run All</button><br>
                 <py-script src="/micrograd_ai.py"></py-script>
                 <div id="micrograd-run-all-print-div"></div><br>
                 <div id="micrograd-run-all-fig1-div"></div>

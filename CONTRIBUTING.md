@@ -9,9 +9,9 @@ Thank you for wanting to contribute to the PyScript project!
     * [Reporting bugs](#reporting-bugs)
     * [Reporting security issues](#reporting-security-issues)
     * [Asking questions](#asking-questions)
-    * [Setting up your local environment](#setting-up-your-local-environment)
+    * [Setting up your local environment and developing](#setting-up-your-local-environment-and-developing)
     * [Places to start](#places-to-start)
-    * [Submitting a change](#submitting-a-change)
+    * [Setting up your local environment and developing](#setting-up-your-local-environment-and-developing)
 * [License terms for contributions](#license-terms-for-contributions)
 * [Becoming a maintainer](#becoming-a-maintainer)
 * [Trademarks](#trademarks)
@@ -41,62 +41,6 @@ If you aren't confident that it is appropriate to submit a security issue using 
 
 If you have questions about the project, using PyScript, or anything else, please ask in the [PyScript forum](https://community.anaconda.cloud/c/tech-topics/pyscript).
 
-## Setting up your local environment
-
-* Clone the repo using
-```
-    git clone https://github.com/pyscript/pyscript
-```
-* cd into the `pyscriptjs` folder using the line below in your terminal (if your terminal is already in pyscript then use **cd pyscriptjs** instead)
-```
-    cd pyscript/pyscriptjs
-```
-* Install the dependencies with the command below
-
-```
-    make setup
-```
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; **NOTE**: If `make setup` gives a node/npm version required  error then go to [troubleshooting](https://github.com/pyscript/pyscript/blob/main/TROUBLESHOOTING.md)
-
-* You can also run the examples locally by running the command below in your terminal
-```
-    make examples
-```
-* Run ***npm run dev*** to build and run the dev server. This will also watch for changes and rebuild when a file is saved.
-```
-    npm run dev
-```
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; **NOTE**: To access your local build paste `http://localhost:8080` into your browser
-
-* When you make changes locally, double check that your contribution follows the PyScript formatting rules by running `npm run lint`. Note that in this case you're looking for the errors, <u>**NOT**</u> the warnings (Unless the warning is created by a local change). If an error is found by lint you should fix it <u>**before**</u> creating a pull request
-
-
-Now that node and npm have both been updated `make setup` should work, and you can continue [setting up your local environment](#setting-up-your-local-environment) without problems (hopefully).
-
-### Building the docs
-
-To build the documentation locally first make sure you are in the `docs` directory.
-
-You'll need `make` and `conda` installed in your machine. The rest of the environment should be automatically download and created for you once you use the command:
-
-```
-make setup
-```
-
-Use `conda activate $environment_name` to activate your environment.
-
-To add new information to the documentation make sure you conform with PyScript's code of conduct and with the general principles of Diataxis. Don't worry about reading too much on it, just do your best to keep your contributions on the correct axis.
-
-Write your documentation files using [Markedly Structured Text](https://myst-parser.readthedocs.io/en/latest/syntax/optional.html), which is very similar to vanilla Markdown but with some addons to create the documentation infrastructure.
-
-Once done, initialize a server to check your work:
-
-```
-make livehtml
-```
-
-Visible here: http:///127.0.0.1:8000
-
 ## Places to start
 
 If you would like to contribute to PyScript, but you aren't sure where to begin, here are some suggestions.
@@ -106,21 +50,15 @@ If you would like to contribute to PyScript, but you aren't sure where to begin,
 * **Look over the open pull requests.** Do you have comments or suggestions for the proposed changes? Add them.
 * **Check out the examples.** Is there a use case that would be good to have sample code for? Create an example for it.
 
-# Submitting a change
+## Setting up your local environment and developing
 
-All contributions must be licensed Apache 2.0, and all files must have a copy of the boilerplate license comment (can be copied from an existing file).
+If you would like to contribute to PyScript, you will need to set up a local development environment. The [following instructions](https://docs.pyscript.net/latest/development/setting-up-environment.html) will help you get started.
 
-To create a change for PyScript, you can follow the process described [here](https://docs.github.com/en/get-started/quickstart/contributing-to-projects).
-
-* Fork a personal copy of the PyScript project.
-* Make the changes you would like (don't forget to test them!)
-* Please squash all commits for a change into a single commit (this can be done using "git rebase -i"). Do your best to have a well-formed commit message for the change.
-* Open a pull request back to the PyScript project and address any comments/questions from the maintainers and other contributors.
+You can also read the [developing process](https://docs.pyscript.net/latest/development/developing.html) and how to rebase your branch with the latest changes.
 
 ## License terms for contributions
 
 This Project welcomes contributions, suggestions, and feedback. All contributions, suggestions, and feedback you submitted are accepted under the [Apache 2.0](./LICENSE) license. You represent that if you do not own copyright in the code that you have the authority to submit it under the [Apache 2.0](./LICENSE) license. All feedback, suggestions, or contributions are not confidential.
-
 
 ## Becoming a maintainer
 

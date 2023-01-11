@@ -5,7 +5,7 @@
     <link rel="icon" type="image/x-icon" href="./favicon.png">
     <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-
+    <link rel="stylesheet" href="./assets/css/examples.css" />
     <style>
       .loading {
         display: inline-block;
@@ -30,8 +30,15 @@
 
     </head>
     <body>
-      <b>
-      </b>
+      <nav class="navbar" style="background-color: #000000;">
+        <div class="app-header">
+          <a href="/">
+            <img src="./logo.png" class="logo">
+          </a>
+          <a class="title" href="" style="color: #f0ab3c;">Fractals with NumPy and canvas</a>
+        </div>
+      </nav>
+      <section class="pyscript">
       <div style="display: flex; flex-direction: column; gap: 1em; width: 600px">
         <div id="mandelbrot">
           <div style="text-align: center">Mandelbrot set</div>
@@ -77,16 +84,28 @@
           </div>
         </div>
       </div>
+      <py-tutor>
+        <py-config type="json">
+          {
+            "packages": [
+              "numpy",
+              "sympy"
+            ],
+            "fetch": [
+              {
+                "files": [
+                  "./palettes.py",
+                  "./fractals.py"
+                ]
+              }
+            ],
+            "plugins": [
+              "../build/plugins/python/py_tutor.py"
+            ]
+          }
+        </py-config>
 
-<py-env>
-- numpy
-- sympy
-- paths:
-  - ./palettes.py
-  - ./fractals.py
-</py-env>
-
-<py-script>
+        <py-script>
 from pyodide.ffi import to_js, create_proxy
 
 import numpy as np
@@ -307,12 +326,16 @@ canvas.addEventListener("mousemove", create_proxy(mousemove))
 
 import asyncio
 
-_ = await asyncio.gather(
-  draw_mandelbrot(),
-  draw_julia(),
-  draw_newton(),
-)
-</py-script>
+async def main():
+  _ = await asyncio.gather(
+    draw_mandelbrot(),
+    draw_julia(),
+    draw_newton(),
+  )
 
-</body>
+asyncio.ensure_future(main())
+    </py-script>
+   </section>
+  </py-tutor>
+  </body>
 </html>

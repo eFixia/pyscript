@@ -5,13 +5,31 @@
     <link rel="icon" type="image/x-icon" href="./favicon.png">
     <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-    <py-env>
-      - matplotlib
-    </py-env>
+    <link rel="stylesheet" href="./assets/css/examples.css" />
     </head>
     <body>
+    <nav class="navbar" style="background-color: #000000;">
+      <div class="app-header">
+        <a href="/">
+          <img src="./logo.png" class="logo">
+        </a>
+        <a class="title" href="" style="color: #f0ab3c;">Matplotlib</a>
+      </div>
+    </nav>
+    <section class="pyscript">
       <div id="mpl"></div>
-      <py-script output="mpl">
+
+      <py-tutor>
+        <py-config>
+          packages = [
+            "matplotlib"
+          ]
+          plugins = [
+            "../build/plugins/python/py_tutor.py"
+          ]
+        </py-config>
+
+        <py-script>
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import numpy as np
@@ -44,7 +62,9 @@ tpc = ax1.tripcolor(triang, z, shading='flat')
 fig1.colorbar(tpc)
 ax1.set_title('tripcolor of Delaunay triangulation, flat shading')
 
-fig1
-      </py-script>
-    </body>
+display(fig1, target="mpl")
+        </py-script>
+      </py-tutor>
+    </section>
+  </body>
 </html>

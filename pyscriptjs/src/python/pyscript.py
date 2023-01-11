@@ -1,12 +1,19 @@
+import ast
 import asyncio
 import base64
+import html
 import io
-import sys
+import re
 import time
+from collections import namedtuple
 from textwrap import dedent
 
-import micropip  # noqa: F401
-from js import console, document
+import js
+
+try:
+    from pyodide import create_proxy
+except ImportError:
+    from pyodide.ffi import create_proxy
 
 loop = asyncio.get_event_loop()
 
@@ -26,9 +33,23 @@ MIME_METHODS = {
 
 
 def render_image(mime, value, meta):
+    # If the image value is using bytes we should convert it to base64
+    # otherwise it will return raw bytes and the browser will not be able to
+    # render it.
+    if isinstance(value, bytes):
+        value = base64.b64encode(value).decode("utf-8")
+
+    # This is the pattern of base64 strings
+    base64_pattern = re.compile(
+        r"^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$"
+    )
+    # If value doesn't match the base64 pattern we should encode it to base64
+    if len(value) > 0 and not base64_pattern.match(value):
+        value = base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
     data = f"data:{mime};charset=utf-8;base64,{value}"
     attrs = " ".join(['{k}="{v}"' for k, v in meta.items()])
-    return f'<img src="{data}" {attrs}</img>'
+    return f'<img src="{data}" {attrs}></img>'
 
 
 def identity(value, meta):
@@ -36,7 +57,7 @@ def identity(value, meta):
 
 
 MIME_RENDERERS = {
-    "text/plain": identity,
+    "text/plain": html.escape,
     "text/html": identity,
     "image/png": lambda value, meta: render_image("image/png", value, meta),
     "image/jpeg": lambda value, meta: render_image("image/jpeg", value, meta),
@@ -44,6 +65,53 @@ MIME_RENDERERS = {
     "application/json": identity,
     "application/javascript": lambda value, meta: f"<script>{value}</script>",
 }
+
+
+# these are set by _set_version_info
+__version__ = None
+version_info = None
+
+
+def _set_version_info(version_from_runtime: str):
+    """Sets the __version__ and version_info properties from provided JSON data
+    Args:
+        version_from_runtime (str): A "dotted" representation of the version:
+            YYYY.MM.m(m).releaselevel
+            Year, Month, and Minor should be integers; releaselevel can be any string
+    """
+    global __version__
+    global version_info
+
+    __version__ = version_from_runtime
+
+    version_parts = version_from_runtime.split(".")
+    year = int(version_parts[0])
+    month = int(version_parts[1])
+    minor = int(version_parts[2])
+    if len(version_parts) > 3:
+        releaselevel = version_parts[3]
+    else:
+        releaselevel = ""
+
+    VersionInfo = namedtuple("version_info", ("year", "month", "minor", "releaselevel"))
+    version_info = VersionInfo(year, month, minor, releaselevel)
+
+    # we ALSO set PyScript.__version__ and version_info for backwards
+    # compatibility. Should be killed eventually.
+    PyScript.__version__ = __version__
+    PyScript.version_info = version_info
+
+
+class HTML:
+    """
+    Wrap a string so that display() can render it as plain HTML
+    """
+
+    def __init__(self, html):
+        self._html = html
+
+    def _repr_html_(self):
+        return self._html
 
 
 def eval_formatter(obj, print_method):
@@ -69,7 +137,7 @@ def format_mime(obj):
     Formats object using _repr_x_ methods.
     """
     if isinstance(obj, str):
-        return obj, "text/plain"
+        return html.escape(obj), "text/plain"
 
     mimebundle = eval_formatter(obj, "_repr_mimebundle_")
     if isinstance(mimebundle, tuple):
@@ -92,7 +160,7 @@ def format_mime(obj):
         break
     if output is None:
         if not_available:
-            console.warn(
+            js.console.warn(
                 f"Rendered object requested unavailable MIME renderers: {not_available}"
             )
         output = repr(output)
@@ -104,24 +172,49 @@ def format_mime(obj):
     return MIME_RENDERERS[mime_type](output, meta), mime_type
 
 
-class PyScript:
-    loop = loop
+@staticmethod
+def run_until_complete(f):
+    _ = loop.run_until_complete(f)
 
-    @staticmethod
-    def run_until_complete(f):
-        _ = loop.run_until_complete(f)
 
-    @staticmethod
-    def write(element_id, value, append=False, exec_id=0):
-        """Writes value to the element with id "element_id"""
-        Element(element_id).write(value=value, append=append)
-        console.warn(
-            dedent(
-                """PyScript Deprecation Warning: PyScript.write is
-        marked as deprecated and will be removed sometime soon. Please, use
-        Element(<id>).write instead."""
-            )
+@staticmethod
+def write(element_id, value, append=False, exec_id=0):
+    """Writes value to the element with id "element_id"""
+    Element(element_id).write(value=value, append=append)
+    js.console.warn(
+        dedent(
+            """PyScript Deprecation Warning: PyScript.write is
+    marked as deprecated and will be removed sometime soon. Please, use
+    Element(<id>).write instead."""
         )
+    )
+
+
+def set_current_display_target(target_id):
+    get_current_display_target._id = target_id
+
+
+def get_current_display_target():
+    return get_current_display_target._id
+
+
+get_current_display_target._id = None
+
+
+def display(*values, target=None, append=True):
+    default_target = get_current_display_target()
+
+    if default_target is None and target is None:
+        raise Exception(
+            "Implicit target not allowed here. Please use display(..., target=...)"
+        )
+
+    if target is not None:
+        for v in values:
+            Element(target).write(v, append=append)
+    else:
+        for v in values:
+            Element(default_target).write(v, append=append)
 
 
 class Element:
@@ -137,7 +230,7 @@ class Element:
     def element(self):
         """Return the dom element"""
         if not self._element:
-            self._element = document.querySelector(f"#{self._id}")
+            self._element = js.document.querySelector(f"#{self._id}")
         return self._element
 
     @property
@@ -146,25 +239,24 @@ class Element:
 
     @property
     def innerHtml(self):
-        return self.element.innerHtml
+        return self.element.innerHTML
 
     def write(self, value, append=False):
-        out_element_id = self.id
-
         html, mime_type = format_mime(value)
         if html == "\n":
             return
 
         if append:
-            child = document.createElement("div")
-            exec_id = self.element.childElementCount + 1
-            out_element_id = child.id = f"{self.id}-{exec_id}"
+            child = js.document.createElement("div")
             self.element.appendChild(child)
 
-        out_element = document.querySelector(f"#{out_element_id}")
+        if self.element.children:
+            out_element = self.element.children[-1]
+        else:
+            out_element = self.element
 
         if mime_type in ("application/javascript", "text/html"):
-            script_element = document.createRange().createContextualFragment(html)
+            script_element = js.document.createRange().createContextualFragment(html)
             out_element.appendChild(script_element)
         else:
             out_element.innerHTML = html
@@ -177,6 +269,7 @@ class Element:
 
     def select(self, query, from_content=False):
         el = self.element
+
         if from_content:
             el = el.content
 
@@ -184,7 +277,7 @@ class Element:
         if _el:
             return Element(_el.id, _el)
         else:
-            console.warn(f"WARNING: can't find element matching query {query}")
+            js.console.warn(f"WARNING: can't find element matching query {query}")
 
     def clone(self, new_id=None, to=None):
         if new_id is None:
@@ -195,9 +288,11 @@ class Element:
 
         if to:
             to.element.appendChild(clone)
-
-        # Inject it into the DOM
-        self.element.after(clone)
+            # Inject it into the DOM
+            to.element.after(clone)
+        else:
+            # Inject it into the DOM
+            self.element.after(clone)
 
         return Element(clone.id, clone)
 
@@ -209,7 +304,11 @@ class Element:
             self.element.classList.remove(classname)
 
     def add_class(self, classname):
-        self.element.classList.add(classname)
+        if isinstance(classname, list):
+            for cl in classname:
+                self.element.classList.add(cl)
+        else:
+            self.element.classList.add(classname)
 
 
 def add_classes(element, class_list):
@@ -218,7 +317,7 @@ def add_classes(element, class_list):
 
 
 def create(what, id_=None, classes=""):
-    element = document.createElement(what)
+    element = js.document.createElement(what)
     if id_:
         element.id = id_
     add_classes(element, classes)
@@ -332,7 +431,7 @@ class PyListTemplate:
             Element(new_id).element.onclick = foo
 
     def connect(self):
-        self.md = main_div = document.createElement("div")
+        self.md = main_div = js.document.createElement("div")
         main_div.id = self._id + "-list-tasks-container"
 
         if self.theme:
@@ -365,59 +464,204 @@ class PyListTemplate:
         pass
 
 
-class OutputCtxManager:
-    def __init__(self, out=None, output_to_console=True, append=True):
-        self._out = out
-        self._prev = out
-        self.output_to_console = output_to_console
-        self._append = append
+class TopLevelAsyncFinder(ast.NodeVisitor):
+    def is_source_top_level_await(self, source):
+        self.async_found = False
+        node = ast.parse(source)
+        self.generic_visit(node)
+        return self.async_found
 
-    def change(self, out=None, output_to_console=True, append=True):
-        self._prev = self._out
-        self._out = out
-        self.output_to_console = output_to_console
-        self._append = append
+    def visit_Await(self, node):
+        self.async_found = True
 
-    def revert(self):
-        self._out = self._prev
+    def visit_AsyncFor(self, node):
+        self.async_found = True
 
-    def write(self, value):
-        if self._out:
-            Element(self._out).write(value, self._append)
+    def visit_AsyncWith(self, node):
+        self.async_found = True
 
-        if self.output_to_console:
-            console.info(f"[pyscript.py/OutputCtxManager] out={self._out}:", value)
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        pass  # Do not visit children of async function defs
 
 
-class OutputManager:
-    def __init__(self, out=None, err=None, output_to_console=True, append=True):
-        sys.stdout = self._out_manager = OutputCtxManager(
-            out=out, output_to_console=output_to_console, append=append
+def uses_top_level_await(source: str) -> bool:
+    return TopLevelAsyncFinder().is_source_top_level_await(source)
+
+
+class Plugin:
+    def __init__(self, name=None):
+        if not name:
+            name = self.__class__.__name__
+
+        self.name = name
+
+    def init(self, app):
+        self.app = app
+
+    def register_custom_element(self, tag):
+        # TODO: Ideally would be better to use the logger.
+        js.console.info(f"Defining new custom element {tag}")
+
+        def wrapper(class_):
+            # TODO: this is very pyodide specific but will have to do
+            #       until we have JS interface that works across interpreters
+            define_custom_element(tag, create_proxy(class_))  # noqa: F821
+
+        return create_proxy(wrapper)
+
+
+class DeprecatedGlobal:
+    """
+    Proxy for globals which are deprecated.
+
+    The intendend usage is as follows:
+
+        # in the global namespace
+        Element = pyscript.DeprecatedGlobal('Element', pyscript.Element, "...")
+        console = pyscript.DeprecatedGlobal('console', js.console, "...")
+        ...
+
+    The proxy forwards __getattr__ and __call__ to the underlying object, and
+    emit a warning on the first usage.
+
+    This way users see a warning only if they actually access the top-level
+    name.
+    """
+
+    def __init__(self, name, obj, message):
+        self.__name = name
+        self.__obj = obj
+        self.__message = message
+        self.__warning_already_shown = False
+
+    def __repr__(self):
+        return f"<DeprecatedGlobal({self.__name!r})>"
+
+    def _show_warning(self, message):
+        """
+        NOTE: this is overridden by unit tests
+        """
+        # this showWarning is implemented in js and injected into this
+        # namespace by main.ts
+        showWarning(message, "html")  # noqa: F821
+
+    def _show_warning_maybe(self):
+        if self.__warning_already_shown:
+            return
+        self._show_warning(self.__message)
+        self.__warning_already_shown = True
+
+    def __getattr__(self, attr):
+        self._show_warning_maybe()
+        return getattr(self.__obj, attr)
+
+    def __call__(self, *args, **kwargs):
+        self._show_warning_maybe()
+        return self.__obj(*args, **kwargs)
+
+    def __iter__(self):
+        self._show_warning_maybe()
+        return iter(self.__obj)
+
+    def __getitem__(self, key):
+        self._show_warning_maybe()
+        return self.__obj[key]
+
+    def __setitem__(self, key, value):
+        self._show_warning_maybe()
+        self.__obj[key] = value
+
+
+class PyScript:
+    """
+    This class is deprecated since 2022.12.1.
+
+    All its old functionalities are available as module-level functions. This
+    class should be killed eventually.
+    """
+
+    loop = loop
+
+    @staticmethod
+    def run_until_complete(f):
+        run_until_complete(f)
+
+    @staticmethod
+    def write(element_id, value, append=False, exec_id=0):
+        write(element_id, value, append, exec_id)
+
+
+def _install_deprecated_globals_2022_12_1(ns):
+    """
+    Install into the given namespace all the globals which have been
+    deprecated since the 2022.12.1 release. Eventually they should be killed.
+    """
+
+    def deprecate(name, obj, instead):
+        message = f"Direct usage of <code>{name}</code> is deprecated. " + instead
+        ns[name] = DeprecatedGlobal(name, obj, message)
+
+    # function/classes defined in pyscript.py ===> pyscript.XXX
+    pyscript_names = [
+        "PyItemTemplate",
+        "PyListTemplate",
+        "PyWidgetTheme",
+        "add_classes",
+        "create",
+        "loop",
+    ]
+    for name in pyscript_names:
+        deprecate(
+            name, globals()[name], f"Please use <code>pyscript.{name}</code> instead."
         )
-        sys.stderr = self._err_manager = OutputCtxManager(
-            out=err, output_to_console=output_to_console, append=append
+
+    # stdlib modules ===> import XXX
+    stdlib_names = [
+        "asyncio",
+        "base64",
+        "io",
+        "sys",
+        "time",
+        "datetime",
+        "pyodide",
+        "micropip",
+    ]
+    for name in stdlib_names:
+        obj = __import__(name)
+        deprecate(name, obj, f"Please use <code>import {name}</code> instead.")
+
+    # special case
+    deprecate(
+        "dedent", dedent, "Please use <code>from textwrap import dedent</code> instead."
+    )
+
+    # these are names that used to leak in the globals but they are just
+    # implementation details. People should not use them.
+    private_names = [
+        "eval_formatter",
+        "format_mime",
+        "identity",
+        "render_image",
+        "MIME_RENDERERS",
+        "MIME_METHODS",
+    ]
+    for name in private_names:
+        obj = globals()[name]
+        message = (
+            f"<code>{name}</code> is deprecated. "
+            "This is a private implementation detail of pyscript. "
+            "You should not use it."
         )
-        self.output_to_console = output_to_console
-        self._append = append
+        ns[name] = DeprecatedGlobal(name, obj, message)
 
-    def change(self, out=None, err=None, output_to_console=True, append=True):
-        self._out_manager.change(
-            out=out, output_to_console=output_to_console, append=append
-        )
-        sys.stdout = self._out_manager
-        self._err_manager.change(
-            out=err, output_to_console=output_to_console, append=append
-        )
-        sys.stderr = self._err_manager
-        self.output_to_console = output_to_console
-        self._append = append
+    # these names are available as js.XXX
+    for name in ["document", "console"]:
+        obj = getattr(js, name)
+        deprecate(name, obj, f"Please use <code>js.{name}</code> instead.")
 
-    def revert(self):
-        self._out_manager.revert()
-        self._err_manager.revert()
-        sys.stdout = self._out_manager
-        sys.stderr = self._err_manager
-
-
-pyscript = PyScript()
-output_manager = OutputManager()
+    # PyScript is special, use a different message
+    message = (
+        "The <code>PyScript</code> object is deprecated. "
+        "Please use <code>pyscript</code> instead."
+    )
+    ns["PyScript"] = DeprecatedGlobal("PyScript", PyScript, message)
